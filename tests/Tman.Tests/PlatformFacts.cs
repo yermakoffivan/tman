@@ -25,6 +25,18 @@ public sealed class UnixFactAttribute : FactAttribute
 }
 
 /// <summary>
+/// A fact whose subject only exists on Windows; skipped elsewhere carrying <paramref name="because"/>,
+/// for the same reason as <see cref="UnixFactAttribute"/>.
+/// </summary>
+public sealed class WindowsFactAttribute : FactAttribute
+{
+    public WindowsFactAttribute(string because)
+    {
+        if (!OperatingSystem.IsWindows()) Skip = because;
+    }
+}
+
+/// <summary>
 /// A fact that needs tman to see the whole process tree, which is <see cref="TreeStats.CoversTree"/>
 /// — the same predicate production consults, so the gate cannot drift from what it guards. That
 /// predicate is pinned to Linux by <c>TreeStatsTests.CoversTree_OnlyWhereParentPidsAreCheaplyAvailable</c>,
