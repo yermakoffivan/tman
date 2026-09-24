@@ -107,20 +107,31 @@ public static class Runner
             return ExitNotFound;
         }
 
+        (DateTime Utc, long? Ticks)? childStart;
+        try { childStart = ProcUtil.StartStamp(proc); }
+        // the child exited, and was reaped, before its start could be read: the record says so rather
+        // than inventing a start, and a record with no start never identifies as a live run. Once the
+        // runtime has seen the exit, StartTime refuses outright; before that, /proc is already gone
+        catch (Exception e) when ((e is InvalidOperationException || ProcUtil.VerdictFor(e) is not null)
+                                  && proc.HasExited) { childStart = null; }
+        var runnerStart = ProcUtil.OwnStart();
+
         var record = new RunRecord
         {
             Id = id,
             Name = name ?? alias,
             Pid = proc.Id,
             RunnerPid = Environment.ProcessId,
-            RunnerStartUtc = ProcUtil.StartTimeUtc(Environment.ProcessId) ?? DateTime.UtcNow,
+            RunnerStartUtc = runnerStart.Utc,
+            RunnerStartTicks = runnerStart.Ticks,
             Command = command,
             Args = args,
             Cwd = cwd,
             Group = group,
             ParentId = Environment.GetEnvironmentVariable(ParentIdEnvVar),
             StartedUtc = DateTime.UtcNow,
-            ChildStartUtc = ProcUtil.StartTimeUtc(proc.Id) ?? DateTime.UtcNow,
+            ChildStartUtc = childStart?.Utc,
+            ChildStartTicks = childStart?.Ticks,
             HeartbeatUtc = DateTime.UtcNow,
             LastOutputUtc = DateTime.UtcNow,
             Caps = caps,

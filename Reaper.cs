@@ -24,9 +24,9 @@ public static class Reaper
         {
             if (r.State != RunState.Running) continue;
 
-            var childAlive = ProcUtil.Identify(r.Pid, r.ChildStartUtc) == ProcessIdentity.Mine;
+            var childAlive = ProcUtil.Identify(r.Pid, r.ChildStartUtc, r.ChildStartTicks) == ProcessIdentity.Mine;
             var runnerAlive = r.RunnerPid == Environment.ProcessId
-                || ProcUtil.Identify(r.RunnerPid, r.RunnerStartUtc) == ProcessIdentity.Mine;
+                || ProcUtil.Identify(r.RunnerPid, r.RunnerStartUtc, r.RunnerStartTicks) == ProcessIdentity.Mine;
 
             if (!childAlive)
             {
@@ -60,7 +60,7 @@ public static class Reaper
         foreach (var r in Store.LoadAll())
         {
             if (r.State != RunState.Running) continue;
-            if (ProcUtil.Identify(r.Pid, r.ChildStartUtc) == ProcessIdentity.Mine)
+            if (ProcUtil.Identify(r.Pid, r.ChildStartUtc, r.ChildStartTicks) == ProcessIdentity.Mine)
                 live.Add(r);
         }
         return live;

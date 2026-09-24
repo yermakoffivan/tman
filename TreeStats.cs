@@ -4,7 +4,10 @@ namespace Tman;
 
 public readonly record struct TreeSample(long CpuJiffies, long IoBytes, long RssMb, int Procs, string States);
 
-internal readonly record struct ProcStat(int Ppid, char State, long CpuJiffies, long RssPages);
+/// <param name="StartTicks">
+/// Field 22: start time in clock ticks after boot. Null only on a line cut short before it.
+/// </param>
+internal readonly record struct ProcStat(int Ppid, char State, long CpuJiffies, long RssPages, long? StartTicks);
 
 public static class TreeStats
 {
@@ -145,8 +148,9 @@ public static class TreeStats
         // field 24 (rss, in pages) — absent on truncated /proc reads, so treat as zero rather than fail
         long rssPages = 0;
         if (rest.Length > 21) long.TryParse(rest[21], out rssPages);
+        long? startTicks = rest.Length > 19 && long.TryParse(rest[19], out var st) ? st : null;
         var state = rest[0].Length > 0 ? rest[0][0] : '?';
-        stat = new ProcStat(ppid, state, utime + stime + cutime + cstime, rssPages);
+        stat = new ProcStat(ppid, state, utime + stime + cutime + cstime, rssPages, startTicks);
         return true;
     }
 }

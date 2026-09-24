@@ -19,6 +19,8 @@ public sealed class RunRecord
     public int Pid { get; set; }
     public int RunnerPid { get; set; }
     public DateTime RunnerStartUtc { get; set; }
+    /// <summary>See <see cref="ChildStartTicks"/>.</summary>
+    public long? RunnerStartTicks { get; set; }
     /// <summary>Absolute path to the executable, resolved through PATH so one binary reads one way.</summary>
     public required string Command { get; set; }
     public required string[] Args { get; set; }
@@ -28,7 +30,15 @@ public sealed class RunRecord
     /// <summary>Id of the tman run that launched this one, when a supervised process re-enters tman.</summary>
     public string? ParentId { get; set; }
     public DateTime StartedUtc { get; set; }
-    public DateTime ChildStartUtc { get; set; }
+    /// <summary>Null when the child had already exited before tman could read its start.</summary>
+    public DateTime? ChildStartUtc { get; set; }
+    /// <summary>
+    /// Linux only: the child's start in clock ticks after boot, which is what identity is compared
+    /// by there, because the wall-clock start moves whenever the clock steps. Null elsewhere, and in
+    /// records written before tman recorded it — those fall back to the wall-clock comparison, a
+    /// migration path that ends once such records are pruned.
+    /// </summary>
+    public long? ChildStartTicks { get; set; }
     public DateTime HeartbeatUtc { get; set; }
     public DateTime LastOutputUtc { get; set; }
     public RunState State { get; set; } = RunState.Running;
@@ -243,7 +253,7 @@ public static class Store
     /// </summary>
     public static void StampLockOwner(FileStream lockFile)
     {
-        var startUtc = ProcUtil.StartTimeUtc(Environment.ProcessId) ?? DateTime.UtcNow;
+        var startUtc = ProcUtil.OwnStart().Utc;
         var bytes = System.Text.Encoding.UTF8.GetBytes(
             $"{Environment.ProcessId} {startUtc:O}\n");
         lockFile.SetLength(0);

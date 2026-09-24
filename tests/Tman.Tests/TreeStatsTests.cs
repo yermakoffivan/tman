@@ -17,6 +17,7 @@ public class TreeStatsTests
         Assert.Equal('S', st.State);
         Assert.Equal(160, st.CpuJiffies);
         Assert.Equal(23, st.RssPages);
+        Assert.Equal(21, st.StartTicks);
     }
 
     [Fact]
@@ -26,6 +27,7 @@ public class TreeStatsTests
         Assert.True(TreeStats.TryParseStat("1234 (sh) S 1 2 3 4 5 6 7 8 9 10 100 50 7 3", out var st));
         Assert.Equal(0, st.RssPages);
         Assert.Equal(160, st.CpuJiffies);
+        Assert.Null(st.StartTicks);
     }
 
     [Fact]

@@ -112,7 +112,8 @@ public class ReaperTests : IDisposable
             r.RunnerPid = Environment.ProcessId;
             // recorded before the clock stepped 10s back: today's re-read is 10s off the record
             r.ChildStartUtc = child.StartTime.ToUniversalTime() + TimeSpan.FromSeconds(10);
-            SaveWithChildStartTicks(r, StartTicksOf(child.Id));
+            r.ChildStartTicks = StartTicksOf(child.Id);
+            Store.Save(r);
 
             Assert.Contains(Reaper.LiveRuns(), live => live.Id == r.Id);
         }
@@ -129,16 +130,6 @@ public class ReaperTests : IDisposable
         var stat = File.ReadAllText($"/proc/{pid}/stat");
         var afterComm = stat[(stat.LastIndexOf(')') + 2)..].Split(' ');
         return long.Parse(afterComm[19]);
-    }
-
-    /// <summary>Saves a record carrying the Linux start ticks a Runner records beside the wall clock.</summary>
-    void SaveWithChildStartTicks(RunRecord r, long ticks)
-    {
-        Store.Save(r);
-        var path = Path.Combine(_home.Path, "runs", r.Id + ".json");
-        var json = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path))!;
-        json["ChildStartTicks"] = ticks;
-        File.WriteAllText(path, json.ToJsonString());
     }
 
     [Fact]

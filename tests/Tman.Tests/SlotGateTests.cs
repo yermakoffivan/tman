@@ -257,12 +257,14 @@ public class SlotGateTests : IDisposable
             ?? throw new IOException("could not start sleep");
         try
         {
+            var orphanStart = ProcUtil.StartStamp(orphan);
             Store.Save(new RunRecord
             {
                 Id = "orphanchild1",
                 Name = "dedup",
                 Pid = orphan.Id,
-                ChildStartUtc = ProcUtil.StartTimeUtc(orphan.Id) ?? DateTime.UtcNow,
+                ChildStartUtc = orphanStart.Utc,
+                ChildStartTicks = orphanStart.Ticks,
                 Command = Canon.ResolveCommand("sleep"),
                 Args = new[] { "30" },
                 Group = group,
