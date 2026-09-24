@@ -9,4 +9,6 @@ obj/
 /test.cmd
 
 # worktrack loop state — per-machine lease + session notes, not shared history
-.worktrack/
+.worktrack/*
+!.worktrack/mcp.json
+!.worktrack/templates.json

@@ -11,3 +11,11 @@ alias "test" {
     command "dotnet"
     args "test" "tests/Tman.Tests/Tman.Tests.csproj"
 }
+
+// Builds the application and the test project together (Tman.Tests references tman.csproj);
+// the root has no solution, so a bare `dotnet build` would skip the tests.
+alias "build" {
+    command "dotnet"
+    args "build" "tests/Tman.Tests/Tman.Tests.csproj"
+    max-time "15m"
+}
