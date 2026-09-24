@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 
 namespace Tman;
@@ -147,7 +148,8 @@ public static class Runner
         var prevCpu = TimeSpan.Zero;
         var prevTick = DateTime.UtcNow;
         var cpuBreaches = 0;
-        try { prevCpu = proc.TotalProcessorTime; } catch { }
+        try { prevCpu = proc.TotalProcessorTime; }
+        catch (Exception e) when (ExitedMeanwhile(e, proc)) { }
 
         var lastOutput = record.LastOutputUtc;
         var lastProgress = record.StartedUtc;
@@ -201,8 +203,16 @@ public static class Runner
                 }
                 if (progressed) lastProgress = now;
 
-                if (!sampleOk && ProcUtil.TryRefresh(proc.Id, out var live) && live is not null)
-                    memMb = live.WorkingSet64 / (1024 * 1024);
+                // the sample fails mostly because the child is exiting, so this read must survive that
+                if (!sampleOk)
+                {
+                    try
+                    {
+                        proc.Refresh();
+                        memMb = proc.WorkingSet64 / (1024 * 1024);
+                    }
+                    catch (Exception e) when (ExitedMeanwhile(e, proc)) { }
+                }
                 if (memMb > record.PeakMemMb) record.PeakMemMb = memMb;
 
                 // Only when there is no tree sample to read: the root's own processor time. Off Linux
@@ -216,7 +226,7 @@ public static class Runner
                         cpuPct = (curCpu - prevCpu).TotalSeconds / (elapsed * Environment.ProcessorCount) * 100.0;
                     prevCpu = curCpu;
                 }
-                catch { }
+                catch (Exception e) when (ExitedMeanwhile(e, proc)) { }
                 prevTick = now;
 
                 if (caps.MaxTime is { } mt && now - record.StartedUtc > mt)
@@ -257,7 +267,7 @@ public static class Runner
             }
 
             try { await Task.WhenAll(outPump, errPump); } catch { }
-            try { if (!proc.HasExited) await proc.WaitForExitAsync(); } catch { }
+            await proc.WaitForExitAsync();
 
             record.HeartbeatUtc = DateTime.UtcNow;
             if (killReason is not null)
@@ -292,6 +302,14 @@ public static class Runner
             _ => ExitKilled,
         };
     }
+
+    /// <summary>
+    /// A read of the child's counters failed because the child exited under it: the runtime raises
+    /// InvalidOperationException once it knows, Win32Exception when the OS entry went first. Any
+    /// other failure, or either one from a child still running, is a defect and propagates.
+    /// </summary>
+    static bool ExitedMeanwhile(Exception e, Process proc) =>
+        e is InvalidOperationException or Win32Exception && proc.HasExited;
 
     static int? TryReadExitCode(Process proc)
     {
