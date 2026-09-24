@@ -36,6 +36,27 @@ below 1.0, behavior changes land in minor releases.
   same state and reason the runner writes for a child it cannot vouch for.
 
 ### Fixed
+- **A recycled pid tman may not open no longer crashes every command on Windows.** When Windows
+  handed a recorded pid to a process this user may not open, `Process.HasExited` threw
+  `Access is denied` out of the sweep, so every command, `tman ls` included, died. Liveness and
+  identity are now one check that reads such a pid as another process's run and moves on. Only the
+  failures the runtime documents for a gone or foreign process count as a verdict; anything else
+  surfaces instead of reading as a dead run.
+- **A clock step no longer turns a live Linux run into an orphan.** Linux recomputes a process's
+  wall-clock start from boot time on every read, so an NTP step or a WSL clock resync after sleep
+  moved it past the 2s tolerance and the next sweep treated the live run as a reused pid. Runs now
+  record the start in clock ticks after boot (`/proc/<pid>/stat` field 22) and compare those.
+  Records written by an older tman have no ticks and still use the wall clock until they are
+  pruned. A zombie now reads as gone rather than running.
+- **A kill hits only the process that was checked.** The kill reopened the pid after the identity
+  check. On Windows the check and the kill now share one handle, and Windows never reuses a pid
+  while a handle to it is open. When part of a tree survives a kill, each failure goes to stderr:
+  the reaper keeps the record running for the next sweep, `--replace` refuses to start beside the
+  survivor, and `tman kill` exits 1.
+- **A child exiting under the monitor no longer crashes it.** A memory read taken just as the child
+  exited threw out of the monitor loop. A child that exits before its start time can be read is
+  now recorded without one, instead of with the current time, which could have matched a later
+  process.
 - **Two unnamed runs of one command no longer write one log.** A named run is alone by its name
   lock, but `max-parallel 2` admits two `tman run -- npm test` at once, both keyed to
   `.tman/npm.log`, and the second open truncated the first run's capture while it was still being

@@ -78,7 +78,7 @@ tman init --shims --gitignore
 | `tman run [flags] -- <cmd> [args]` | run a process under supervision |
 | `tman run --alias <name> [args]` / `tman <alias>` | run a `.tman.kdl` alias |
 | `tman list [--all]` | list live runs (or all records) |
-| `tman kill <id\|name\|all>` | kill run(s); an unknown flag refuses the command with exit 127 rather than being skipped |
+| `tman kill <id\|name\|all>` | kill run(s); an unknown flag refuses the command with exit 127 rather than being skipped; exits 1 when part of a run's tree could not be killed |
 | `tman clean` | run the housekeeping sweep now and report what it did |
 | `tman status [id\|name\|id-prefix] [--json]` | summary counts, or one run's detail |
 | `tman init [--shims] [--gitignore]` | scaffold `.tman.kdl` + shims (aliases it cannot detect are left commented out, so `./test` fails loudly instead of faking a pass); `--gitignore` ignores `.tman/` and the shims, and skips an alias whose name is already a directory, so `/test` never hides a `test/` tree |
