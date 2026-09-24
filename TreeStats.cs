@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 
 namespace Tman;
@@ -55,9 +56,13 @@ public static class TreeStats
         using (p)
         {
             long cpu = 0;
-            try { cpu = (long)(p.TotalProcessorTime.TotalSeconds * 100); } catch { }
+            // the root exiting under the read: InvalidOperationException once the runtime knows,
+            // Win32Exception when the OS entry went first
+            try { cpu = (long)(p.TotalProcessorTime.TotalSeconds * 100); }
+            catch (Exception e) when (e is InvalidOperationException or Win32Exception) { }
             long rssMb = 0;
-            try { rssMb = p.WorkingSet64 / (1024 * 1024); } catch { }
+            try { rssMb = p.WorkingSet64 / (1024 * 1024); }
+            catch (Exception e) when (e is InvalidOperationException or Win32Exception) { }
             sample = new TreeSample(cpu, 0, rssMb, 1, "");
             return true;
         }
@@ -72,7 +77,8 @@ public static class TreeStats
             if (!int.TryParse(Path.GetFileName(dir), out var pid)) continue;
             string? text;
             try { text = File.ReadAllText(Path.Combine(dir, "stat")); }
-            catch { continue; }
+            // gone since the listing, or not ours to read: either way not part of this tree's sample
+            catch (Exception e) when (ProcUtil.VerdictFor(e) is not null) { continue; }
             if (!TryParseStat(text, out var st)) continue;
             procs[pid] = st;
         }
@@ -85,7 +91,7 @@ public static class TreeStats
                 if (!TryParseStat(text, out var st)) return false;
                 procs[rootPid] = st;
             }
-            catch { return false; }
+            catch (Exception e) when (ProcUtil.VerdictFor(e) is not null) { return false; }
         }
 
         var byPpid = new Dictionary<int, List<int>>();
@@ -130,7 +136,8 @@ public static class TreeStats
                     total += long.Parse(line.AsSpan(6));
             return total;
         }
-        catch { return 0; }
+        // gone mid-sample, or io counters readable only by the process's owner
+        catch (Exception e) when (ProcUtil.VerdictFor(e) is not null) { return 0; }
     }
 
     internal static bool TryParseStat(string text, out ProcStat stat)

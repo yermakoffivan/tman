@@ -200,6 +200,6 @@ public static class ProcUtil
             proc = p;
             return true;
         }
-        catch { return false; }
+        catch (Exception e) when (VerdictFor(e) is not null) { return false; }
     }
 }
