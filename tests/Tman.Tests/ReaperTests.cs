@@ -94,6 +94,53 @@ public class ReaperTests : IDisposable
         Assert.Null(saved.ExitCode);
     }
 
+    /// <summary>
+    /// Linux derives a process's wall-clock start from boot time, recomputed on every read, so an
+    /// NTP step or a WSL clock resync after sleep moves it. A run recorded before such a step is the
+    /// same process afterwards, and must still be live — not reaped as an orphan whose pid was reused.
+    /// </summary>
+    [LinuxFact("the recomputed wall-clock start and /proc starttime ticks are Linux's")]
+    public void LiveRuns_ARunWhoseStartMovedWithTheWallClock_IsStillLive()
+    {
+        using var child = System.Diagnostics.Process.Start("sleep", "30")
+            ?? throw new IOException("could not start sleep");
+        try
+        {
+            var r = Finished("clockstep001", TimeSpan.FromMinutes(1));
+            r.State = RunState.Running;
+            r.Pid = child.Id;
+            r.RunnerPid = Environment.ProcessId;
+            // recorded before the clock stepped 10s back: today's re-read is 10s off the record
+            r.ChildStartUtc = child.StartTime.ToUniversalTime() + TimeSpan.FromSeconds(10);
+            SaveWithChildStartTicks(r, StartTicksOf(child.Id));
+
+            Assert.Contains(Reaper.LiveRuns(), live => live.Id == r.Id);
+        }
+        finally
+        {
+            child.Kill();
+            child.WaitForExit();
+        }
+    }
+
+    /// <summary>Field 22 of /proc/&lt;pid&gt;/stat: start time in clock ticks after boot, which no clock step moves.</summary>
+    static long StartTicksOf(int pid)
+    {
+        var stat = File.ReadAllText($"/proc/{pid}/stat");
+        var afterComm = stat[(stat.LastIndexOf(')') + 2)..].Split(' ');
+        return long.Parse(afterComm[19]);
+    }
+
+    /// <summary>Saves a record carrying the Linux start ticks a Runner records beside the wall clock.</summary>
+    void SaveWithChildStartTicks(RunRecord r, long ticks)
+    {
+        Store.Save(r);
+        var path = Path.Combine(_home.Path, "runs", r.Id + ".json");
+        var json = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path))!;
+        json["ChildStartTicks"] = ticks;
+        File.WriteAllText(path, json.ToJsonString());
+    }
+
     [Fact]
     public void Resolve_FindsFinishedRunsByName()
     {

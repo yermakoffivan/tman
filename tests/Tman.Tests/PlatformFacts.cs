@@ -25,6 +25,18 @@ public sealed class UnixFactAttribute : FactAttribute
 }
 
 /// <summary>
+/// A fact whose subject only exists on Linux — /proc — skipped elsewhere carrying
+/// <paramref name="because"/>, for the same reason as <see cref="UnixFactAttribute"/>.
+/// </summary>
+public sealed class LinuxFactAttribute : FactAttribute
+{
+    public LinuxFactAttribute(string because)
+    {
+        if (!OperatingSystem.IsLinux()) Skip = because;
+    }
+}
+
+/// <summary>
 /// A fact whose subject only exists on Windows; skipped elsewhere carrying <paramref name="because"/>,
 /// for the same reason as <see cref="UnixFactAttribute"/>.
 /// </summary>
