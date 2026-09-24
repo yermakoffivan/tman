@@ -252,7 +252,8 @@ public static class Runner
             if (killReason is not null)
             {
                 Console.Error.WriteLine($"tman: killing pid {record.Pid}: {killReason}");
-                ProcUtil.KillTree(record.Pid);
+                // through the object that started it: its pid cannot have been handed on while it is held
+                ProcUtil.KillTree(proc);
             }
 
             try { await Task.WhenAll(outPump, errPump); } catch { }

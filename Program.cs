@@ -190,7 +190,11 @@ public static partial class Program
                 Console.Error.WriteLine($"tman: replacing run '{name}'{who}");
                 if (holder is not null)
                 {
-                    ProcUtil.KillTree(holder.Pid);
+                    if (!ProcUtil.KillTree(holder.Pid, holder.ChildStartUtc, holder.ChildStartTicks))
+                    {
+                        Console.Error.WriteLine($"tman: run '{name}' could not be killed; not replacing it");
+                        return Runner.ExitKilled;
+                    }
                     holder.State = RunState.Killed;
                     holder.KillReason = "replaced by newer run";
                     Store.Save(holder);
@@ -217,7 +221,12 @@ public static partial class Program
                     return Runner.ExitKilled;
                 }
                 Console.Error.WriteLine($"tman: replacing run '{name}' (pid {existing.Pid})");
-                ProcUtil.KillTree(existing.Pid);
+                if (!ProcUtil.KillTree(existing.Pid, existing.ChildStartUtc, existing.ChildStartTicks))
+                {
+                    Console.Error.WriteLine($"tman: run '{name}' could not be killed; not replacing it");
+                    Store.ReleaseLock(lockFile);
+                    return Runner.ExitKilled;
+                }
                 existing.State = RunState.Killed;
                 existing.KillReason = "replaced by newer run";
                 Store.Save(existing);
@@ -319,6 +328,7 @@ public static partial class Program
         if (targets.Count == 0) throw new FormatException("kill requires <id|name|all>");
 
         var killed = 0;
+        var failed = 0;
         foreach (var target in targets)
         {
             IEnumerable<RunRecord> matches = target == "all"
@@ -328,7 +338,11 @@ public static partial class Program
             foreach (var r in matches)
             {
                 Console.WriteLine($"tman: killing {r.Name ?? r.Id} (pid {r.Pid})");
-                ProcUtil.KillTree(r.Pid);
+                if (!ProcUtil.KillTree(r.Pid, r.ChildStartUtc, r.ChildStartTicks))
+                {
+                    failed++;
+                    continue;
+                }
                 r.State = RunState.Killed;
                 r.KillReason = "killed via tman kill";
                 r.HeartbeatUtc = DateTime.UtcNow;
@@ -336,8 +350,9 @@ public static partial class Program
                 killed++;
             }
         }
-        if (killed == 0) Console.WriteLine("no matching live runs");
-        return 0;
+        if (killed == 0 && failed == 0) Console.WriteLine("no matching live runs");
+        // a run that is still partly alive is not killed, and a script checking the exit must see that
+        return failed == 0 ? 0 : 1;
     }
 
     static int CmdClean()

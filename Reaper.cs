@@ -43,7 +43,9 @@ public static class Reaper
             {
                 if (!quiet)
                     Console.Error.WriteLine($"tman: reaping orphan pid {r.Pid} ({r.Command}, id {r.Id})");
-                ProcUtil.KillTree(r.Pid);
+                // part of the tree survived and said why on stderr: the record stays running, so the
+                // next sweep finds whatever is left rather than a run marked reaped that is not
+                if (!ProcUtil.KillTree(r.Pid, r.ChildStartUtc, r.ChildStartTicks)) continue;
                 r.State = RunState.Reaped;
                 r.KillReason = "runner died; orphan reaped";
                 r.HeartbeatUtc = DateTime.UtcNow;

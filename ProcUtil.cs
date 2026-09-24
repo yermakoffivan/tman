@@ -41,18 +41,90 @@ public static class ProcUtil
     /// </param>
     public static ProcessIdentity Identify(int pid, DateTime? recordedStartUtc, long? recordedStartTicks)
     {
-        if (pid <= 0 || recordedStartUtc is null) return ProcessIdentity.Gone;
+        using var mine = OpenIfMine(pid, recordedStartUtc, recordedStartTicks, out var identity);
+        return identity;
+    }
+
+    /// <summary>
+    /// Opens the pid and identifies it through that same object, which is returned only when it is
+    /// <see cref="ProcessIdentity.Mine"/>, for the caller to act on and dispose. On Windows the object
+    /// holds a handle taken before the check, and Windows never hands a pid out again while a handle
+    /// to it is open, so the process checked is the process acted on. Linux and macOS signal by pid,
+    /// so there the gap between check and kill is only as safe as the kernel's reluctance to reuse.
+    /// </summary>
+    static Process? OpenIfMine(int pid, DateTime? recordedStartUtc, long? recordedStartTicks, out ProcessIdentity identity)
+    {
+        identity = ProcessIdentity.Gone;
+        if (pid <= 0 || recordedStartUtc is null) return null;
+        Process? p = null;
         try
         {
-            if (OperatingSystem.IsLinux() && VerdictFromStat(ReadStat(pid), recordedStartTicks) is { } byStat)
-                return byStat;
-            using var p = Process.GetProcessById(pid);
-            if (p.HasExited) return ProcessIdentity.Gone;
-            return MatchesWallClock(p.StartTime.ToUniversalTime(), recordedStartUtc.Value)
-                ? ProcessIdentity.Mine
-                : ProcessIdentity.NotMine;
+            var byStat = OperatingSystem.IsLinux() ? VerdictFromStat(ReadStat(pid), recordedStartTicks) : null;
+            if (byStat is { } settled && settled != ProcessIdentity.Mine) { identity = settled; return null; }
+            p = Process.GetProcessById(pid);
+            if (OperatingSystem.IsWindows() && !Pin(p)) return null;
+            identity = byStat ?? ByWallClock(p, recordedStartUtc.Value);
+            if (identity != ProcessIdentity.Mine) return null;
+            var mine = p;
+            p = null;
+            return mine;
         }
-        catch (Exception e) when (VerdictFor(e) is { } verdict) { return verdict; }
+        catch (Exception e) when (VerdictFor(e) is { } verdict) { identity = verdict; return null; }
+        finally { p?.Dispose(); }
+    }
+
+    /// <summary>
+    /// Makes the object hold its own handle, which every later call on it then goes through. False
+    /// when the process has exited: OpenProcess found it gone, or found its exit code already set.
+    /// A handle this user may not have throws <see cref="Win32Exception"/>, which is not ours.
+    /// </summary>
+    static bool Pin(Process p)
+    {
+        try { _ = p.SafeHandle; return true; }
+        catch (InvalidOperationException) { return false; }
+    }
+
+    /// <summary>Windows and macOS, and Linux records from before tman recorded start ticks.</summary>
+    static ProcessIdentity ByWallClock(Process p, DateTime recordedStartUtc)
+    {
+        if (p.HasExited) return ProcessIdentity.Gone;
+        return MatchesWallClock(p.StartTime.ToUniversalTime(), recordedStartUtc)
+            ? ProcessIdentity.Mine
+            : ProcessIdentity.NotMine;
+    }
+
+    /// <summary>
+    /// Kills the recorded process's tree, if the pid still names it. False when part of the tree
+    /// could not be killed; each such failure is written to stderr. A pid that no longer names the
+    /// recorded process is left alone, and said so when it now names someone else's.
+    /// </summary>
+    public static bool KillTree(int pid, DateTime? recordedStartUtc, long? recordedStartTicks)
+    {
+        using var mine = OpenIfMine(pid, recordedStartUtc, recordedStartTicks, out var identity);
+        if (mine is not null) return KillTree(mine);
+        if (identity == ProcessIdentity.NotMine)
+            Console.Error.WriteLine($"tman: pid {pid} no longer names the recorded run; not killing it");
+        return true;
+    }
+
+    /// <summary>
+    /// Kills <paramref name="p"/> and its descendants through the object the caller already holds.
+    /// A tree already gone is not a failure. A caller inside the tree is a tman defect, so the
+    /// runtime's refusal of that propagates.
+    /// </summary>
+    public static bool KillTree(Process p)
+    {
+        try
+        {
+            p.Kill(entireProcessTree: true);
+            return true;
+        }
+        catch (AggregateException e)
+        {
+            foreach (var inner in e.InnerExceptions)
+                Console.Error.WriteLine($"tman: could not kill part of pid {p.Id}'s tree: {inner.Message}");
+            return false;
+        }
     }
 
     /// <summary>
@@ -129,15 +201,5 @@ public static class ProcUtil
             return true;
         }
         catch { return false; }
-    }
-
-    public static void KillTree(int pid)
-    {
-        try
-        {
-            using var p = Process.GetProcessById(pid);
-            if (!p.HasExited) p.Kill(entireProcessTree: true);
-        }
-        catch { }
     }
 }

@@ -157,6 +157,56 @@ public class ProcUtilTests
         }
     }
 
+    /// <summary>A child that outlives any test: a sleep on POSIX, a ping loop on Windows.</summary>
+    static Process LongChild() =>
+        (OperatingSystem.IsWindows()
+            ? Process.Start(new ProcessStartInfo("ping", new[] { "-n", "60", "127.0.0.1" }) { RedirectStandardOutput = true })
+            : Process.Start("sleep", "60"))
+        ?? throw new IOException("could not start a long-running child");
+
+    [Fact]
+    public void KillTree_TheRecordedProcess_IsKilled()
+    {
+        using var child = LongChild();
+        var (startUtc, ticks) = ProcUtil.StartStamp(child);
+
+        Assert.True(ProcUtil.KillTree(child.Id, startUtc, ticks));
+
+        Assert.True(child.WaitForExit(10_000));
+    }
+
+    [Fact]
+    public void KillTree_APidNowNamingAnotherProcess_IsLeftAlone()
+    {
+        using var child = LongChild();
+        try
+        {
+            // the record says the pid's process started an hour earlier: the OS has handed the pid on
+            var (startUtc, ticks) = ProcUtil.StartStamp(child);
+
+            Assert.True(ProcUtil.KillTree(child.Id, startUtc - TimeSpan.FromHours(1), ticks - 1));
+
+            Assert.False(child.WaitForExit(200));
+        }
+        finally
+        {
+            child.Kill();
+            child.WaitForExit();
+        }
+    }
+
+    [WindowsFact("PID 4 is the protected System process only on Windows")]
+    public void KillTree_AProcessTmanMayNotOpen_IsLeftAloneWithoutThrowing()
+    {
+        Assert.True(ProcUtil.KillTree(4, DateTime.UtcNow, null));
+    }
+
+    [Fact]
+    public void KillTree_APidNoRunHolds_IsAlreadyDone()
+    {
+        Assert.True(ProcUtil.KillTree(UnusedPid, DateTime.UtcNow, null));
+    }
+
     [Theory]
     [InlineData(0, true)]
     [InlineData(1.9, true)]
