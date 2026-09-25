@@ -8,6 +8,8 @@ below 1.0, behavior changes land in minor releases.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-24
+
 ### Changed
 - **`--max-cpu` meters the whole process tree on Linux.** The cull read the root process's own
   CPU time, so a test runner that forks workers, or a shell wrapping the real job, could pin every
@@ -325,7 +327,8 @@ reaping; dedup locks; parallel gating; `.tman.kdl` folder aliases with repo-root
 binaries for linux-x64, linux-arm64, win-x64, osx-arm64, and osx-x64, distributed via npm, PyPI,
 PSGallery, and a shell installer.
 
-[Unreleased]: https://github.com/standardbeagle/tman/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/standardbeagle/tman/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/standardbeagle/tman/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/standardbeagle/tman/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/standardbeagle/tman/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/standardbeagle/tman/compare/v0.1.4...v0.2.0
