@@ -11,6 +11,10 @@ public static class Runner
     public const int ExitNotFound = 127;
     public const int ExitKilled = 130;
 
+    // How long a failed start-stamp read waits to confirm the child really exited. A zombie reaps
+    // at once; the bound only matters for a child that is somehow still running, which re-throws.
+    const int ExitConfirmMs = 2000;
+
     /// <summary>Set on supervised children so a nested tman knows which run launched it.</summary>
     public const string ParentIdEnvVar = "TMAN_RUN_ID";
 
@@ -110,11 +114,15 @@ public static class Runner
 
         (DateTime Utc, long? Ticks)? childStart;
         try { childStart = ProcUtil.StartStamp(proc); }
-        // the child exited, and was reaped, before its start could be read: the record says so rather
-        // than inventing a start, and a record with no start never identifies as a live run. Once the
-        // runtime has seen the exit, StartTime refuses outright; before that, /proc is already gone
+        // the child exited before its start could be read: the record says so rather than inventing a
+        // start, and a record with no start never identifies as a live run. Once the runtime has seen
+        // the exit, StartTime refuses outright; before that, /proc is already gone (Linux) or
+        // proc_pidinfo refuses the unreaped zombie (macOS) while HasExited, which only asks
+        // kill(pid, 0), still calls it alive. It is this user's own child, so the read cannot have
+        // been refused for privilege: the exit is confirmed by reaping it, which returns at once for
+        // a zombie. A child that is still running after that re-throws.
         catch (Exception e) when ((e is InvalidOperationException || ProcUtil.VerdictFor(e) is not null)
-                                  && proc.HasExited) { childStart = null; }
+                                  && proc.WaitForExit(ExitConfirmMs)) { childStart = null; }
         var runnerStart = ProcUtil.OwnStart();
 
         var record = new RunRecord
